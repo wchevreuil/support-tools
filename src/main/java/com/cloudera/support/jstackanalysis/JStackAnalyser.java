@@ -28,6 +28,8 @@ public class JStackAnalyser {
     for (TheadEntry entry : entries) {
       System.out.println(entry);
     }
+    
+    args[1] = "SessionTracker";
 
     // optionally, write details for a specific threadId, for instance
     // printSummaryForThread("2054637940@qtp-829766234-62",map);
