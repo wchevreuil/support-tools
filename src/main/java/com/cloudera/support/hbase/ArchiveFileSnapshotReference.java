@@ -28,12 +28,36 @@ public class ArchiveFileSnapshotReference {
 
     references.checkArchiveFolder(new Path(args[0]), filesToCheck);
 
+    int countDeletable = 0;
+    int totalBytesReleaseable = 0;
+
     for (FileStatus f : references.fileCleaner.getDeletableFiles(filesToCheck)) {
 
-      System.out.println("file " + f.toString() + " will be deleted now");
+      countDeletable++;
 
-      references.fs.delete(f.getPath(), false);
+      totalBytesReleaseable += f.getLen();
 
+      System.out.println(
+        "file " + f.getPath() + " is deletable, and would release " + f.getLen() + " bytes");
+
+      if (args.length == 2 && args[1].equals("delete")) {
+        System.out.println("file " + f.getPath() + " will be deleted now");
+        references.fs.delete(f.getPath(), false);
+        System.out.println("deleted file " + f.getPath() + " of size " + f.getLen() + " bytes");
+      }
+
+    }
+
+    if (countDeletable == 0) {
+      System.out.println("Finished iterating. No file under " + args[0] + " is deletable");
+    } else {
+      System.out.println("Total deletable files under " + args[0] + ": " + countDeletable);
+      if (args.length == 2 && args[1].equals("delete")) {
+        System.out
+            .println("Total space released with deletion: " + totalBytesReleaseable + " bytes");
+      } else {
+        System.out.println("Space to be released: " + totalBytesReleaseable + " bytes");
+      }
     }
 
     references.fileCleaner.stop("closing the utility program");
