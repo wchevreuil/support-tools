@@ -56,11 +56,37 @@ public class IOStatAnalyser extends ApplicationFrame {
 
   public static void main(String[] args) throws Exception {
     // TODO Auto-generated method stub
-    String[] disks = { "sda", "sdb", "sdc", "sdd", "sde", "sdf", "sdg", "sdh", "sdi", "sdj", "sdk",
-        "sdl", "sdm", "sdn", "sdo", "sdp" };
+//    String[] disks = { "sda", "sdb", "sdc", "sdd", "sde", "sdf", "sdg", "sdh", "sdi", "sdj", "sdk",
+//        "sdl", "sdm", "sdn", "sdo", "sdp" };
+    
+    String[] disks = {"xvda","xvdb",              
+        "xvdc",              
+        "xvdd",              
+        "xvde",              
+        "xvdf",              
+        "xvdg",              
+        "xvdh",              
+        "xvdi",              
+        "xvdj",              
+        "xvdk",              
+        "xvdl",              
+        "xvdm",              
+        "xvdn",              
+        "xvdo",              
+        "xvdp",             
+        "xvdq",              
+        "xvdr",             
+        "xvds",            
+        "xvdt",              
+        "xvdu",              
+        "xvdv",              
+        "xvdw",              
+        "xvdx",              
+        "xvdy"}; 
 
     IOStatAnalyser chart = new IOStatAnalyser(
-        "/Users/wchevreuil/Downloads/iostat/iostat_dlsdnr10n66.globetel.com.txt", "w_await", disks);
+        "/Users/wchevreuil/Downloads/amgen/iostat.out_ip-10-242-134-105.amgen.com.out", "await",
+        disks);
 
     chart.pack();
 
@@ -120,7 +146,7 @@ public class IOStatAnalyser extends ApplicationFrame {
 
           String[] columns = line.split("\\s+");
 
-          if (columns.length == 14) {
+          if (columns.length == 12) {
 
             if (!line.matches("Device.*")) {
 
