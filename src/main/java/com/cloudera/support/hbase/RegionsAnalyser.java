@@ -30,6 +30,8 @@ public class RegionsAnalyser {
 
     }
 
+    System.out.print("Total problematic regions: " + regions.size());
+
   }
 
   public static List<Region> getRegionsDetails(Set<String> regionsSet, String
