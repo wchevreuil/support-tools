@@ -4,6 +4,8 @@ import java.io.BufferedReader;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.util.*;
+import java.io.File;
+import java.text.DecimalFormat;
 
 /**
  * Created by wchevreuil on 27/12/2017.
@@ -20,7 +22,7 @@ public class RegionsAnalyser {
     String metaScan = args[2];
 
     List<Region> regions = getRegionsDetails(getProblematicRegions(hbckPath),
-        metaScan);
+        metaScan, hdfsList);
 
     Collections.sort(regions);
 
@@ -35,7 +37,7 @@ public class RegionsAnalyser {
   }
 
   public static List<Region> getRegionsDetails(Set<String> regionsSet, String
-      metaScan) throws
+      metaScan, String hdfsList) throws
       Exception {
 
     BufferedReader reader = new BufferedReader(new InputStreamReader(new
@@ -45,6 +47,8 @@ public class RegionsAnalyser {
 
     List<Region> regions = new ArrayList<>();
 
+    System.out.print("Processing files.");
+    
     while (line != null) {
 
       if(line.indexOf("info:regioninfo")>0){
@@ -57,8 +61,10 @@ public class RegionsAnalyser {
               .indexOf(", ENDKEY"));
           String endKey = line.substring(line.indexOf("ENDKEY => "), line
               .indexOf("}"));
+          
+          List<String> hFiles = getHFiles(regionId, hdfsList);
 
-          Region region = new Region(regionId, startKey, endKey);
+          Region region = new Region(regionId, startKey, endKey, hFiles);
 
           regions.add(region);
 
@@ -69,10 +75,42 @@ public class RegionsAnalyser {
       line = reader.readLine();
 
     }
-
+    
+    System.out.println("");
+    reader.close();
+    
     return regions;
   }
+  
+  public static List<String> getHFiles(String regionId, String hdfsList) throws Exception
+  {
+	  List<String> hFiles = new ArrayList<>();
+	  Scanner scanner = new Scanner(new File(hdfsList));
+	  String line;
+		
+	  while (scanner.hasNext()){
+		  line = scanner.nextLine();
+		  if (line.indexOf("/" + regionId + "/") > 0 && line.indexOf("/hbase/data/") > 0) {
+			  if(isHFile(line)) {
+				  hFiles.add(line);
+				  System.out.print(".");
+			  }
+		  }
+	  }
 
+	  scanner.close();
+	
+      return hFiles;
+  }
+  
+  public static boolean isHFile(String foldersLine) {
+	  if (foldersLine.indexOf("recovered.edits") > 0) return false;
+	  if (foldersLine.indexOf(".tmp") > 0) return false;
+	  if (foldersLine.indexOf(".regioninfo") > 0) return false;
+	  if (foldersLine.indexOf("<dir>") > 0) return false;
+	  
+	  return true;
+  }
 
   public static Set<String> getProblematicRegions (String hbck) throws
     Exception {
@@ -125,6 +163,12 @@ public class RegionsAnalyser {
     String startKey;
 
     String endKey;
+    
+    List<String> hFiles;
+    
+    long regionSizeInBytes;
+    
+    Integer hFilesCount;
 
     public Region(String id, String startKey, String endKey){
 
@@ -133,7 +177,44 @@ public class RegionsAnalyser {
       this.startKey = startKey;
 
       this.endKey = endKey;
+      
+      this.hFiles = new ArrayList<>();
+      
+      this.regionSizeInBytes = -1;
+      
+      this.hFilesCount = -1;
+      
+    }
+    
+    public Region(String id, String startKey, String endKey, List<String> hFiles){
 
+        this.regionId = id;
+
+        this.startKey = startKey;
+
+        this.endKey = endKey;
+        
+        this.hFiles = hFiles;
+
+        this.regionSizeInBytes = this.parseRegionSizeInBytes();
+        
+        this.hFilesCount = this.parseHFilesCount();
+        
+      }
+    
+    private long parseRegionSizeInBytes() {
+    		long sum = 0;
+    		
+    		for (String line : this.hFiles) {
+    			String sizeString = line.split(" ")[1];
+    			sum += Long.parseLong(sizeString);
+		}
+    		
+    		return sum;
+    }
+    
+    private Integer parseHFilesCount() {
+		return this.hFiles.size();
     }
 
     @Override public int compareTo(Region other) {
@@ -148,7 +229,7 @@ public class RegionsAnalyser {
 
     @Override
     public String toString(){
-      return this.regionId + ", startkey: " + startKey + ", endkey: " + endKey;
+      return this.regionId + ", startkey: " + startKey + ", endkey: " + endKey + ", hFiles: " + hFilesCount + ", size: " + (new DecimalFormat("#.##")).format((double)(regionSizeInBytes) / (1024 * 1024)) + " MB";
     }
   }
 
