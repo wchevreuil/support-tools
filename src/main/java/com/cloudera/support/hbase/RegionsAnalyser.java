@@ -206,7 +206,8 @@ public class RegionsAnalyser {
     		long sum = 0;
     		
     		for (String line : this.hFiles) {
-    			String sizeString = line.split(" ")[1];
+//    		  System.out.println(line);
+    			String sizeString = line.split("\\s+")[4];
     			sum += Long.parseLong(sizeString);
 		}
     		
@@ -229,7 +230,7 @@ public class RegionsAnalyser {
 
     @Override
     public String toString(){
-      return this.regionId + ", startkey: " + startKey + ", endkey: " + endKey + ", hFiles: " + hFilesCount + ", size: " + (new DecimalFormat("#.##")).format((double)(regionSizeInBytes) / (1024 * 1024)) + " MB";
+      return this.regionId + ", " + startKey + ", " + endKey + ", hFiles: " + hFilesCount + ", size: " + (new DecimalFormat("#.##")).format((double)(regionSizeInBytes) / (1024 * 1024)) + " MB";
     }
   }
 
