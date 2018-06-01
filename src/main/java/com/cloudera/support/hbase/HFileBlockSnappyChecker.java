@@ -23,11 +23,16 @@ import java.util.Map;
  */
 public class HFileBlockSnappyChecker {
 
+  boolean printKeysOnly;
+
   public static void main(String[] args) throws Exception {
 
     Path filePath = new Path(args[0]);
 
     HFileBlockSnappyChecker checker = new HFileBlockSnappyChecker();
+
+    checker.printKeysOnly = args.length == 2 ? args[1].equals("-keysOnly") :
+        false;
 
     checker.checkBlocksIntegrity(checker.getBlocksStartKeys(filePath), filePath);
 
@@ -91,54 +96,124 @@ public class HFileBlockSnappyChecker {
 
     String cellKey = null;
 
+    StringBuilder failedKeys = new StringBuilder();
+
+    failedKeys.append("-------> key ranges for failed blocks:");
+
+    boolean lastBlockFailed = false;
+
+    String lastKey = null;
+
     for(BlockInfo info : blocksInfo) {
 
+      System.out.println(">>>>> block: " + info.blockIndex + ", startkey: " +
+          info
+          .startKey + ", endkey:" + info.endKey);
       try {
 
         HFileScanner scanner = reader.getScanner(false, false, false);
 
         int scanResult = scanner.seekTo(Bytes.toBytesBinary(info.startKey.split
-            ("//")[0]));
+            ("/")[0]));
 
         if (scanResult == -1) {
           scanner.seekTo();
         }
 
-        do {
+        int cellsCount = 0;
 
-          cell = scanner.getKeyValue();
+        String currentKey = null;
 
-          cellKey = scanner.getKeyString();
+        if(lastKey == null || lastKey.compareTo(info.startKey.split
+            ("/")[0]) < 0) {
 
-        } while (scanner.next() && !cellKey.equals(info.endKey));
+          do {
 
-        System.out.println("--------------");
-        System.out.println("Checked block " + info.blockIndex + ".");
-        System.out.println("Block start key: " + info.startKey);
-        System.out.println("Block offset: " + info.offset);
-        System.out.println("Block size: " + info.dataSize);
-        System.out.println("Latest KV in this block: " +
-            cell);
+            cell = scanner.getKeyValue();
+
+            cellKey = scanner.getKeyString();
+
+            currentKey = cell.toString().split("/")[0];
+
+            if (printKeysOnly) {
+
+              if (!currentKey.equals(lastKey)) {
+                System.out.println(currentKey);
+                lastKey = currentKey;
+                if (lastBlockFailed) {
+                  failedKeys.append(" -> " + lastKey);
+                  lastBlockFailed = false;
+                }
+              }
+            }
+
+            cellsCount++;
+
+          } while (scanner.next());
+
+        }
+
+        System.out.println("Cells read on this block: " + cellsCount);
+
+        if(!printKeysOnly) {
+          System.out.println("--------------");
+          System.out.println("Checked block " + info.blockIndex + ".");
+          System.out.println("Block start key: " + info.startKey);
+          System.out.println("Block offset: " + info.offset);
+          System.out.println("Block size: " + info.dataSize);
+          System.out.println("Latest KV in this block: " +
+              cell + ":" + Bytes.toStringBinary(cell.getValue()));
+        }
         successBlocks++;
 
       } catch (Throwable t) {
 
-        System.out.println("--------------");
-        System.out.println("Error checking block " + info.blockIndex + ".");
-        System.out.println("Block start key: " + info.startKey);
-        System.out.println("Block offset: " + info.offset);
-        System.out.println("Block size: " + info.dataSize);
-        System.out.println("Latest KV before the error: " + cell);
-        System.out.println(t + " : " + t.getMessage());
-        t.printStackTrace();
+        System.out.println("error in this block");
+        if(!printKeysOnly) {
+
+          System.out.println("--------------");
+          System.out.println("Error checking block " + info.blockIndex + ".");
+          System.out.println("Block start key: " + info.startKey);
+          System.out.println("Block offset: " + info.offset);
+          System.out.println("Block size: " + info.dataSize);
+          System.out.println("Latest KV in this block: " +
+              ( cell != null ? cell + ":" + Bytes.toStringBinary(cell
+                  .getValue()) : ""));
+          System.out.println(t + " : " + t.getMessage());
+          t.printStackTrace();
+
+        } else {
+
+          if(!lastBlockFailed) {
+
+            failedKeys.append("\n" + info.startKey.split
+                ("/")[0]);
+
+
+            lastBlockFailed = true;
+
+          }
+
+        }
+
+
         failedBlocks++;
 
-      }
+      } /*finally {
+
+        reader.close();
+
+      }*/
+    }
+
+    if(printKeysOnly){
+      System.out.println(failedKeys);
     }
 
     System.out.println("--------");
     System.out.println("Blocks readable: " + successBlocks);
     System.out.println("Blocks corrupt: " + failedBlocks);
+
 
   }
 
