@@ -59,7 +59,7 @@ public class ArchiveFileSnapshotReference {
     references.checkArchiveFolder(new Path(args[0]), filesToCheck);
 
     int countDeletable = 0;
-    int totalBytesReleaseable = 0;
+    long totalBytesReleaseable = 0;
 
     for (FileStatus f : references.fileCleaner.getDeletableFiles(filesToCheck)) {
 
