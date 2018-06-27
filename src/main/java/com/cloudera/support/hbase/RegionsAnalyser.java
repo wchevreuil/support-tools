@@ -9,20 +9,38 @@ import java.text.DecimalFormat;
 
 /**
  * Created by wchevreuil on 27/12/2017.
+ *
+ * Util tool to analyse regions info from outputs of meta scan, hbase dir
+ * listing and hbck details.
+ *
+ * It produces a report of regions size. If an hbck output is passed and
+ * there are inconsistent regions, it will only produce reports for these
+ * inconsistent regions.
+ *
  */
 public class RegionsAnalyser {
 
 
   public static void main (String[] args) throws  Exception {
 
-    String hbckPath = args[0];
+    String hdfsList = args[0];
 
-    String hdfsList = args[1];
+    String metaScan = args[1];
 
-    String metaScan = args[2];
+    String hbckPath = null;
 
-    List<Region> regions = getRegionsDetails(getProblematicRegions(hbckPath),
-        metaScan, hdfsList);
+    if(args.length ==3) {
+
+      hbckPath = args[2];
+
+    }
+
+    Map<String, TableStats> tableStatsMap = new HashMap<>();
+
+    List<Region> regions = getRegionsDetails(hbckPath
+            == null ? null : getProblematicRegions
+            (hbckPath),
+        metaScan, hdfsList, tableStatsMap);
 
     Collections.sort(regions);
 
@@ -32,12 +50,32 @@ public class RegionsAnalyser {
 
     }
 
-    System.out.print("Total problematic regions: " + regions.size());
+    for(String tableName : tableStatsMap.keySet()){
+
+      System.out.println("Stats for table " + tableName + ": ");
+      System.out.println("Total size: " + tableStatsMap.get(tableName).tableTotalSize);
+      System.out.println("Regions count: " + tableStatsMap.get(tableName).regionCount);
+      System.out.println("Smallest region size: " + tableStatsMap.get
+          (tableName).smallestRegionSize);
+      System.out.println("Largest region size: " + tableStatsMap.get(tableName)
+          .largestRegionSize);
+      double totalSize = tableStatsMap.get(tableName).tableTotalSize;
+      System.out.println("Avg region size: " + totalSize / tableStatsMap.get
+          (tableName).regionCount);
+
+    }
+
+
+    if(hbckPath != null) {
+
+      System.out.print("Total problematic regions: " + regions.size());
+
+    }
 
   }
 
   public static List<Region> getRegionsDetails(Set<String> regionsSet, String
-      metaScan, String hdfsList) throws
+      metaScan, String hdfsList, Map<String, TableStats> tableStatsMap) throws
       Exception {
 
     BufferedReader reader = new BufferedReader(new InputStreamReader(new
@@ -51,11 +89,25 @@ public class RegionsAnalyser {
     
     while (line != null) {
 
-      if(line.indexOf("info:regioninfo")>0){
+      if(line.indexOf("column=info:regioninfo")>0){
+
+//        System.out.println(line);
+
+        String tableName = line.split(",")[0];
+
+        TableStats stats = tableStatsMap.get(tableName);
+
+        if(stats==null) {
+
+          stats = new TableStats(tableName);
+
+          tableStatsMap.put(tableName, stats);
+
+        }
 
         String regionId = line.split("\\.")[1].split("\\.")[0];
 
-        if(regionsSet.contains(regionId)){
+        if(regionsSet == null || regionsSet.contains(regionId)){
 
           String startKey = line.substring(line.indexOf("STARTKEY => "),line
               .indexOf(", ENDKEY"));
@@ -64,9 +116,26 @@ public class RegionsAnalyser {
           
           List<String> hFiles = getHFiles(regionId, hdfsList);
 
-          Region region = new Region(regionId, startKey, endKey, hFiles);
+          Region region = new Region(regionId, tableName, startKey, endKey,
+              hFiles);
 
           regions.add(region);
+
+          stats.regionCount++;
+
+          long regionSize = region.parseRegionSizeInBytes();
+
+          stats.tableTotalSize += regionSize;
+
+          if( stats.largestRegionSize < regionSize ) {
+
+            stats.largestRegionSize = regionSize;
+
+          } else if (stats.smallestRegionSize > regionSize ) {
+
+            stats.smallestRegionSize = regionSize;
+
+          }
 
         }
 
@@ -156,11 +225,28 @@ public class RegionsAnalyser {
 
     }
 
+  static class TableStats {
+    String tableName;
+    long regionCount;
+    long largestRegionSize;
+    long smallestRegionSize = Long.MAX_VALUE;
+    long tableTotalSize;
+
+    public TableStats(String tableName){
+
+      this.tableName = tableName;
+
+    }
+
+  }
+
   static class Region implements Comparable<Region>{
 
     String regionId;
 
     String startKey;
+
+    String tableName;
 
     String endKey;
     
@@ -186,9 +272,12 @@ public class RegionsAnalyser {
       
     }
     
-    public Region(String id, String startKey, String endKey, List<String> hFiles){
+    public Region(String id, String tableName, String startKey, String endKey,
+        List<String> hFiles){
 
         this.regionId = id;
+
+        this.tableName =tableName;
 
         this.startKey = startKey;
 
@@ -230,7 +319,10 @@ public class RegionsAnalyser {
 
     @Override
     public String toString(){
-      return this.regionId + ", " + startKey + ", " + endKey + ", hFiles: " + hFilesCount + ", size: " + (new DecimalFormat("#.##")).format((double)(regionSizeInBytes) / (1024 * 1024)) + " MB";
+      return this.regionId + ", table: " + this.tableName + ", " + startKey +
+          ", " +
+          endKey + ", "
+          + "hFiles: " + hFilesCount + ", size: " + (new DecimalFormat("#.##")).format((double)(regionSizeInBytes) / (1024 * 1024)) + " MB";
     }
   }
 
