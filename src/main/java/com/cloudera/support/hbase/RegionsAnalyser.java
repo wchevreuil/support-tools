@@ -23,15 +23,43 @@ public class RegionsAnalyser {
 
   public static void main (String[] args) throws  Exception {
 
-    String hdfsList = args[0];
+    String hdfsList = null;
 
-    String metaScan = args[1];
+    String metaScan = null;
 
     String hbckPath = null;
 
-    if(args.length ==3) {
+    int seekToLineMeta = 0;
 
-      hbckPath = args[2];
+    int seekToLineDir = 0;
+
+    String tableSpecific = null;
+
+    for(String arg : args){
+
+      if(arg.startsWith("-hdfsList=")) {
+        hdfsList = arg.split("=")[1];
+      }
+
+      if(arg.startsWith("-metaScan=")){
+        metaScan = arg.split("=")[1];
+      }
+
+      if(arg.startsWith("-hbckPath=")){
+        hbckPath = arg.split("=")[1];
+      }
+
+      if(arg.startsWith("-seekMetaTo=")){
+        seekToLineMeta = Integer.parseInt(arg.split("=")[1]);
+      }
+
+      if(arg.startsWith("-seekDirTo=")){
+        seekToLineDir = Integer.parseInt(arg.split("=")[1]);
+      }
+
+      if(arg.startsWith("-table=")){
+        tableSpecific = arg.split("=")[1];
+      }
 
     }
 
@@ -40,7 +68,7 @@ public class RegionsAnalyser {
     List<Region> regions = getRegionsDetails(hbckPath
             == null ? null : getProblematicRegions
             (hbckPath),
-        metaScan, hdfsList, tableStatsMap);
+        metaScan, hdfsList, tableStatsMap, seekToLineMeta, tableSpecific, seekToLineDir);
 
     Collections.sort(regions);
 
@@ -75,7 +103,8 @@ public class RegionsAnalyser {
   }
 
   public static List<Region> getRegionsDetails(Set<String> regionsSet, String
-      metaScan, String hdfsList, Map<String, TableStats> tableStatsMap) throws
+      metaScan, String hdfsList, Map<String, TableStats> tableStatsMap, int
+      seekToLineMeta, String table, int seekToLineDir) throws
       Exception {
 
     BufferedReader reader = new BufferedReader(new InputStreamReader(new
@@ -85,60 +114,77 @@ public class RegionsAnalyser {
 
     List<Region> regions = new ArrayList<>();
 
-    System.out.print("Processing files.");
+    System.out.println("Processing files.");
+
+    int currentLine = 0;
     
     while (line != null) {
 
-      if(line.indexOf("column=info:regioninfo")>0){
+      if(currentLine < seekToLineMeta) {
 
-//        System.out.println(line);
+        currentLine++;
 
-        String tableName = line.split(",")[0];
+      } else {
 
-        TableStats stats = tableStatsMap.get(tableName);
+        currentLine++;
 
-        if(stats==null) {
+        System.out.println("reading line: " + currentLine);
 
-          stats = new TableStats(tableName);
+        if (line.indexOf("column=info:regioninfo") > 0) {
 
-          tableStatsMap.put(tableName, stats);
+          //        System.out.println(line);
 
-        }
+          String tableName = line.split(",")[0].trim();
 
-        String regionId = line.split("\\.")[1].split("\\.")[0];
+          if(table !=null && !tableName.equals(table)){
+            break;
+          }
 
-        if(regionsSet == null || regionsSet.contains(regionId)){
+          TableStats stats = tableStatsMap.get(tableName);
 
-          String startKey = line.substring(line.indexOf("STARTKEY => "),line
-              .indexOf(", ENDKEY"));
-          String endKey = line.substring(line.indexOf("ENDKEY => "), line
-              .indexOf("}"));
-          
-          List<String> hFiles = getHFiles(regionId, hdfsList);
+          if (stats == null) {
 
-          Region region = new Region(regionId, tableName, startKey, endKey,
-              hFiles);
+            stats = new TableStats(tableName);
 
-          regions.add(region);
+            tableStatsMap.put(tableName, stats);
 
-          stats.regionCount++;
+          }
 
-          long regionSize = region.parseRegionSizeInBytes();
+          String regionId = line.split("ENCODED => ")[1].split(",")[0];
 
-          stats.tableTotalSize += regionSize;
+          if (regionsSet == null || regionsSet.contains(regionId)) {
 
-          if( stats.largestRegionSize < regionSize ) {
+            String startKey = line.substring(line.indexOf("STARTKEY => "), line
+                .indexOf(", ENDKEY"));
+            String endKey = line.substring(line.indexOf("ENDKEY => "), line
+                .indexOf("}"));
 
-            stats.largestRegionSize = regionSize;
+            List<String> hFiles = getHFiles(regionId, hdfsList, seekToLineDir);
 
-          } else if (stats.smallestRegionSize > regionSize ) {
+            Region region = new Region(regionId, tableName, startKey, endKey,
+                hFiles);
 
-            stats.smallestRegionSize = regionSize;
+            regions.add(region);
+
+            stats.regionCount++;
+
+            long regionSize = region.parseRegionSizeInBytes();
+
+            stats.tableTotalSize += regionSize;
+
+            if (stats.largestRegionSize < regionSize) {
+
+              stats.largestRegionSize = regionSize;
+
+            } else if (stats.smallestRegionSize > regionSize) {
+
+              stats.smallestRegionSize = regionSize;
+
+            }
 
           }
 
         }
-
       }
 
       line = reader.readLine();
@@ -151,20 +197,30 @@ public class RegionsAnalyser {
     return regions;
   }
   
-  public static List<String> getHFiles(String regionId, String hdfsList) throws Exception
+  public static List<String> getHFiles(String regionId, String hdfsList, int
+      seekToLine) throws Exception
   {
 	  List<String> hFiles = new ArrayList<>();
 	  Scanner scanner = new Scanner(new File(hdfsList));
 	  String line;
-		
+	  int currentLine = 0;
+		boolean regionDirReached = false;
 	  while (scanner.hasNext()){
-		  line = scanner.nextLine();
-		  if (line.indexOf("/" + regionId + "/") > 0 && line.indexOf("/hbase/data/") > 0) {
-			  if(isHFile(line)) {
-				  hFiles.add(line);
-				  System.out.print(".");
-			  }
-		  }
+      line = scanner.nextLine();
+	    if(currentLine<seekToLine){
+	      currentLine++;
+      } else {
+        if (line.indexOf("/" + regionId + "/") > 0
+            && line.indexOf("/hbase/data/") > 0) {
+          regionDirReached = true;
+          if (isHFile(line)) {
+            hFiles.add(line);
+            System.out.print(".");
+          }
+        } else if(regionDirReached) {
+          break;
+        }
+      }
 	  }
 
 	  scanner.close();
