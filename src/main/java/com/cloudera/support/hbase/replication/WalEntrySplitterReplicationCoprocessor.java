@@ -21,16 +21,23 @@ public class WalEntrySplitterReplicationCoprocessor extends BaseRegionServerObse
 
     private static final Log LOG = LogFactory.getLog(WalEntrySplitterReplicationCoprocessor.class);
 
+    private static final String MAX_OPS_PER_BATCH = "hbase.support.coprocessor.walentrysplitter.max_ops";
+
+    private final int maxOps;
+
     private ReplicationSink replicationSink;
 
-    private final Configuration conf  = HBaseConfiguration.create();
+    private final Configuration conf;
 
     private volatile Connection sharedHtableCon;
 
     private final Object sharedHtableConLock = new Object();
 
     public WalEntrySplitterReplicationCoprocessor() throws IOException {
+        this.conf  = HBaseConfiguration.create();
         this.replicationSink = new ReplicationSink(HBaseConfiguration.create(),null);
+        //here we avoid batch mutating more than 1,0000 cells at once
+        this.maxOps = conf.getInt(MAX_OPS_PER_BATCH, 1_000);
     }
 
     public void preReplicateLogEntries(ObserverContext<RegionServerCoprocessorEnvironment> ctx,
@@ -88,8 +95,7 @@ public class WalEntrySplitterReplicationCoprocessor extends BaseRegionServerObse
 
                         totalReplicated++;
 
-                        //here we avoid batch mutating more than 1,0000 cells at once
-                        if (totalReplicated > 1_000) {
+                        if (totalReplicated > this.maxOps ) {
                             LOG.info("batching 1,000 cells from entry... ");
                             for (Map.Entry<TableName, Map<List<UUID>, List<Row>>> edit : rowMap.entrySet()) {
                                 batch(edit.getKey(), edit.getValue().values());
@@ -104,10 +110,7 @@ public class WalEntrySplitterReplicationCoprocessor extends BaseRegionServerObse
                     for (Map.Entry<TableName, Map<List<UUID>, List<Row>>> edit : rowMap.entrySet()) {
                         batch(edit.getKey(), edit.getValue().values());
                     }
-//                int size = entries.size();
-//                this..setAgeOfLastAppliedOp(entries.get(size - 1).getKey().getWriteTime());
-//                this.metrics.applyBatch(size);
-//                this.totalReplicatedEdits.addAndGet(totalReplicated);
+
                     modifiableEntries.remove(i);
                 } catch (IOException ex) {
                     LOG.error("Unable to accept edit because:", ex);
