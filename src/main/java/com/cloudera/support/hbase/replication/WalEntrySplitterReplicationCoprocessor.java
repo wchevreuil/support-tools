@@ -38,11 +38,11 @@ public class WalEntrySplitterReplicationCoprocessor extends BaseRegionServerObse
         this.replicationSink = new ReplicationSink(HBaseConfiguration.create(),null);
         //here we avoid batch mutating more than 1,0000 cells at once
         this.maxOps = conf.getInt(MAX_OPS_PER_BATCH, 1_000);
+        LOG.trace("loaded WalEntrySplitterReplicationCoprocessor.");
     }
 
     public void preReplicateLogEntries(ObserverContext<RegionServerCoprocessorEnvironment> ctx,
                                        List<AdminProtos.WALEntry> entries, CellScanner cells) throws IOException {
-
 
         try {
             List<AdminProtos.WALEntry> modifiableEntries = this.getModifiableList(entries);
@@ -51,7 +51,7 @@ public class WalEntrySplitterReplicationCoprocessor extends BaseRegionServerObse
 
                 AdminProtos.WALEntry entry = modifiableEntries.get(i);
 
-                LOG.info("replication entry cell count: " + entry.getAssociatedCellCount());
+                LOG.trace("replication entry cell count: " + entry.getAssociatedCellCount());
 
                 try {
                     long totalReplicated = 0;
@@ -90,13 +90,12 @@ public class WalEntrySplitterReplicationCoprocessor extends BaseRegionServerObse
                             ((Put) m).add(cell);
                         }
 
-
                         previousCell = cell;
 
                         totalReplicated++;
 
                         if (totalReplicated > this.maxOps ) {
-                            LOG.info("batching 1,000 cells from entry... ");
+                            LOG.info("batching "+ this.maxOps + " cells from entry... ");
                             for (Map.Entry<TableName, Map<List<UUID>, List<Row>>> edit : rowMap.entrySet()) {
                                 batch(edit.getKey(), edit.getValue().values());
                             }
@@ -147,18 +146,9 @@ public class WalEntrySplitterReplicationCoprocessor extends BaseRegionServerObse
     }
 
     private List<AdminProtos.WALEntry> getModifiableList(List<AdminProtos.WALEntry> entries) throws Exception {
-
-
-        for(Field f: entries.getClass().getSuperclass().getDeclaredFields()){
-            LOG.info("field: " + f.getName());
-        }
-
-        LOG.info(" class: " + entries.getClass().getSuperclass().getName());
-
         Field field = entries.getClass().getSuperclass().getDeclaredField("list");
         field.setAccessible(true);
         return (List<AdminProtos.WALEntry>) field.get(entries);
-
     }
 
     private boolean isNewRowOrType(final Cell previousCell, final Cell cell) {
