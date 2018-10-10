@@ -38,7 +38,7 @@ public class WalEntrySplitterReplicationCoprocessor extends BaseRegionServerObse
         this.replicationSink = new ReplicationSink(HBaseConfiguration.create(),null);
         //here we avoid batch mutating more than 1,0000 cells at once
         this.maxOps = conf.getInt(MAX_OPS_PER_BATCH, 1_000);
-        LOG.trace("loaded WalEntrySplitterReplicationCoprocessor.");
+        LOG.info("loaded WalEntrySplitterReplicationCoprocessor.");
     }
 
     public void preReplicateLogEntries(ObserverContext<RegionServerCoprocessorEnvironment> ctx,
@@ -51,7 +51,7 @@ public class WalEntrySplitterReplicationCoprocessor extends BaseRegionServerObse
 
                 AdminProtos.WALEntry entry = modifiableEntries.get(i);
 
-                LOG.trace("replication entry cell count: " + entry.getAssociatedCellCount());
+                LOG.debug("replication entry cell count: " + entry.getAssociatedCellCount());
 
                 try {
                     long totalReplicated = 0;
@@ -95,7 +95,7 @@ public class WalEntrySplitterReplicationCoprocessor extends BaseRegionServerObse
                         totalReplicated++;
 
                         if (totalReplicated > this.maxOps ) {
-                            LOG.info("batching "+ this.maxOps + " cells from entry... ");
+                            LOG.trace("batching "+ this.maxOps + " cells from entry... ");
                             for (Map.Entry<TableName, Map<List<UUID>, List<Row>>> edit : rowMap.entrySet()) {
                                 batch(edit.getKey(), edit.getValue().values());
                             }
@@ -117,6 +117,7 @@ public class WalEntrySplitterReplicationCoprocessor extends BaseRegionServerObse
                 }
 
             }
+            LOG.debug("finished pre-replicate call for " + entries.size() + " entries.");
         }catch(Exception e){
             LOG.error("Unexpected error: ", e);
         }
