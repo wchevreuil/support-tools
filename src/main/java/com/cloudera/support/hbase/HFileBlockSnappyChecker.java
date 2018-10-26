@@ -3,10 +3,7 @@ package com.cloudera.support.hbase;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.io.hfile.CacheConfig;
 import org.apache.hadoop.hbase.io.hfile.HFile;
 import org.apache.hadoop.hbase.io.hfile.HFileBlockIndex;
@@ -113,10 +110,12 @@ public class HFileBlockSnappyChecker {
 
         HFileScanner scanner = reader.getScanner(false, false, false);
 
-        int scanResult = scanner.seekTo(Bytes.toBytesBinary(info.startKey.split
-            ("/")[0]));
+        boolean scanResult = scanner.seekBefore(KeyValueUtil.createFirstOnRow(Bytes.toBytesBinary(info.startKey.split
+            ("/")[0])));
 
-        if (scanResult == -1) {
+        System.out.println(scanResult);
+
+        if (!scanResult) {
           scanner.seekTo();
         }
 
@@ -133,7 +132,11 @@ public class HFileBlockSnappyChecker {
 
             cellKey = scanner.getKeyString();
 
+            System.out.println(cellKey);
+
             currentKey = cell.toString().split("/")[0];
+
+            System.out.println("---> current key: " + currentKey);
 
             if (printKeysOnly) {
 
